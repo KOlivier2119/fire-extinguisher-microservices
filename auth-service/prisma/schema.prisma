@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  INSPECTOR
+  USER
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  firstName    String
+  lastName     String
+  passwordHash String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id                    String    @id @default(uuid())
+  tokenHash             String?   @unique
+  otpHash               String?
+  resetSessionTokenHash String?
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt             DateTime
+  sessionExpiresAt      DateTime?
+  attempts              Int       @default(0)
+  verifiedAt            DateTime?
+  used                  Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+
+  @@index([userId])
+}

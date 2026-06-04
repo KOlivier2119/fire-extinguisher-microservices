@@ -1,0 +1,7 @@
+CREATE DATABASE auth_db;
+CREATE DATABASE extinguisher_db;
+CREATE DATABASE notification_db;
+
+GRANT ALL PRIVILEGES ON DATABASE auth_db TO fems;
+GRANT ALL PRIVILEGES ON DATABASE extinguisher_db TO fems;
+GRANT ALL PRIVILEGES ON DATABASE notification_db TO fems;

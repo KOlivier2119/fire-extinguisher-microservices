@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ExtinguisherType {
+  WATER
+  CO2
+  FOAM
+  DRY_CHEMICAL
+}
+
+enum ExtinguisherSize {
+  LB_2_5
+  LB_5
+  LB_9
+  LB_12
+}
+
+enum ExtinguisherStatus {
+  ACTIVE
+  EXPIRED
+  UNDER_MAINTENANCE
+  DECOMMISSIONED
+}
+
+enum InspectionStatus {
+  PENDING
+  COMPLETED
+  OVERDUE
+  CANCELLED
+}
+
+model FireExtinguisher {
+  id               String             @id @default(uuid())
+  serialNumber     String             @unique
+  location         String
+  type             ExtinguisherType
+  size             ExtinguisherSize
+  installationDate DateTime
+  expiryDate       DateTime
+  status           ExtinguisherStatus @default(ACTIVE)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  inspections    Inspection[]
+  maintenanceLogs MaintenanceLog[]
+
+  @@index([expiryDate])
+  @@index([status])
+}
+
+model Inspection {
+  id                  String           @id @default(uuid())
+  extinguisherId      String
+  extinguisher        FireExtinguisher @relation(fields: [extinguisherId], references: [id], onDelete: Cascade)
+  scheduledDate       DateTime
+  scheduledTime       String
+  status              InspectionStatus @default(PENDING)
+  assignedInspectorId String
+  assignedInspectorEmail String?
+  createdById         String
+  createdByEmail      String?
+  notes               String?
+  completedAt         DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([scheduledDate])
+  @@index([status])
+  @@index([assignedInspectorId])
+}
+
+model MaintenanceLog {
+  id               String           @id @default(uuid())
+  extinguisherId   String
+  extinguisher     FireExtinguisher @relation(fields: [extinguisherId], references: [id], onDelete: Cascade)
+  inspectorId      String
+  inspectorEmail   String?
+  actionTaken      String
+  maintenanceDate  DateTime
+  issuesIdentified String?
+  notes            String?
+  recommendations  String?
+  createdAt        DateTime         @default(now())
+
+  @@index([maintenanceDate])
+  @@index([extinguisherId])
+}

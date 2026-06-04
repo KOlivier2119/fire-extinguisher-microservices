@@ -1,0 +1,679 @@
+openapi: 3.0.3
+info:
+  title: TZW LTD FEMS - Combined API
+  version: 1.0.0
+  description: |
+    Fire Extinguisher Management System REST API with RBAC (ADMIN, INSPECTOR, USER).
+    All routes are accessed through the API gateway at `/api`.
+servers:
+  - url: http://localhost:3000/api
+    description: Local API Gateway
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    serviceKey:
+      type: apiKey
+      in: header
+      name: x-service-key
+  parameters:
+    FormatQuery:
+      name: format
+      in: query
+      description: Response format
+      schema:
+        type: string
+        enum: [json, csv, pdf]
+        default: json
+    UuidPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    Role:
+      type: string
+      enum: [ADMIN, INSPECTOR, USER]
+    ExtinguisherType:
+      type: string
+      enum: [WATER, CO2, FOAM, DRY_CHEMICAL]
+    ExtinguisherSize:
+      type: string
+      enum: [LB_1_5, LB_5, LB_9, LB_12]
+    ExtinguisherStatus:
+      type: string
+      enum: [ACTIVE, EXPIRED, UNDER_MAINTENANCE, DECOMMISSIONED]
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        firstName: { type: string }
+        lastName: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    RegisterRequest:
+      type: object
+      required: [firstName, lastName, email, password]
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 100, example: Jane }
+        lastName: { type: string, minLength: 1, maxLength: 100, example: Doe }
+        email: { type: string, format: email, example: jane@example.com }
+        password: { type: string, minLength: 8, maxLength: 128, example: SecurePass123 }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, example: admin@tzw-ltd.com }
+        password: { type: string, example: Admin@123 }
+    TokenPairResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            accessToken: { type: string }
+            refreshToken: { type: string }
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+    LogoutRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email, example: user@tzw-ltd.com }
+    ResetPasswordRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string }
+        newPassword: { type: string, minLength: 8, maxLength: 128 }
+    UpdateProfileRequest:
+      type: object
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 100 }
+        lastName: { type: string, minLength: 1, maxLength: 100 }
+        email: { type: string, format: email }
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string }
+        newPassword: { type: string, minLength: 8, maxLength: 128 }
+    UpdateRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role: { $ref: '#/components/schemas/Role' }
+    ExtinguisherRequest:
+      type: object
+      required: [serialNumber, location, type, size, installationDate, expiryDate]
+      properties:
+        serialNumber: { type: string, example: FE-2024-001 }
+        location: { type: string, example: Building A - Floor 2 }
+        type: { $ref: '#/components/schemas/ExtinguisherType' }
+        size: { $ref: '#/components/schemas/ExtinguisherSize' }
+        installationDate: { type: string, format: date, example: '2024-01-15' }
+        expiryDate: { type: string, format: date, example: '2026-01-15' }
+        status: { $ref: '#/components/schemas/ExtinguisherStatus' }
+    ExtinguisherUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        serialNumber: { type: string }
+        location: { type: string }
+        type: { $ref: '#/components/schemas/ExtinguisherType' }
+        size: { $ref: '#/components/schemas/ExtinguisherSize' }
+        installationDate: { type: string, format: date }
+        expiryDate: { type: string, format: date }
+        status: { $ref: '#/components/schemas/ExtinguisherStatus' }
+    InspectionScheduleRequest:
+      type: object
+      required: [extinguisherId, scheduledDate, scheduledTime, assignedInspectorId, assignedInspectorEmail]
+      properties:
+        extinguisherId: { type: string, format: uuid }
+        scheduledDate: { type: string, format: date, example: '2026-06-15' }
+        scheduledTime: { type: string, example: '09:00' }
+        assignedInspectorId: { type: string, format: uuid }
+        assignedInspectorEmail: { type: string, format: email }
+        notes: { type: string }
+    MaintenanceLogRequest:
+      type: object
+      required: [extinguisherId, actionTaken, maintenanceDate]
+      properties:
+        extinguisherId: { type: string, format: uuid }
+        actionTaken: { type: string, example: Pressure check and seal replacement }
+        maintenanceDate: { type: string, format: date, example: '2026-06-03' }
+        issuesIdentified: { type: string }
+        notes: { type: string }
+        recommendations: { type: string }
+    NotificationSendRequest:
+      type: object
+      required: [to, subject, body]
+      properties:
+        to: { type: string, format: email }
+        subject: { type: string }
+        body: { type: string }
+        type: { type: string, example: PASSWORD_RESET }
+    ErrorResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        message: { type: string }
+security:
+  - bearerAuth: []
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register new user
+      description: Creates a USER role account. Public endpoint.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/User' }
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      description: Returns JWT access and refresh tokens. Public endpoint.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Returns access and refresh tokens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPairResponse' }
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      description: Requires JWT and refreshToken in body. Invalidates the refresh token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '200': { description: Logged out successfully }
+        '401': { description: Authentication required }
+        '404': { description: Refresh token not found }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      description: Rotates refresh token and returns a new token pair. Public endpoint.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: New token pair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPairResponse' }
+        '401': { description: Invalid or expired refresh token }
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      description: Returns the authenticated user's profile.
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/User' }
+        '401': { description: Authentication required }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request password reset email
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '200': { description: Reset email sent if account exists }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset password with token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200': { description: Password reset successful }
+        '400': { description: Invalid or expired token }
+  /users/forgot-password:
+    post:
+      tags: [Users]
+      summary: Request password reset (alias)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '200': { description: Reset email sent if account exists }
+  /users/reset-password:
+    post:
+      tags: [Users]
+      summary: Reset password (alias)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200': { description: Password reset successful }
+  /users/profile:
+    get:
+      tags: [Users]
+      summary: View profile
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/User' }
+    put:
+      tags: [Users]
+      summary: Update profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200': { description: Profile updated }
+        '409': { description: Email already in use }
+  /users/change-password:
+    put:
+      tags: [Users]
+      summary: Change password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200': { description: Password changed }
+        '400': { description: Current password incorrect }
+  /users:
+    get:
+      tags: [Users]
+      summary: List all users
+      description: "Roles: ADMIN"
+      responses:
+        '200': { description: User list }
+        '403': { description: Insufficient permissions }
+  /users/inspectors:
+    get:
+      tags: [Users]
+      summary: List inspectors and admins
+      description: Available to all authenticated users for inspection scheduling.
+      responses:
+        '200': { description: Inspector list }
+  /users/{id}/role:
+    put:
+      tags: [Users]
+      summary: Update user role
+      description: "Roles: ADMIN. Cannot demote the last ADMIN."
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoleRequest'
+      responses:
+        '200': { description: Role updated }
+        '404': { description: User not found }
+        '403': { description: Insufficient permissions }
+  /extinguishers:
+    get:
+      tags: [Extinguishers]
+      summary: List all fire extinguishers
+      responses:
+        '200': { description: List of extinguishers }
+    post:
+      tags: [Extinguishers]
+      summary: Register new fire extinguisher
+      description: "Roles: ADMIN, INSPECTOR"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtinguisherRequest'
+      responses:
+        '201': { description: Created }
+        '403': { description: Insufficient permissions }
+  /extinguishers/{id}:
+    get:
+      tags: [Extinguishers]
+      summary: Get extinguisher by ID
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      responses:
+        '200': { description: Extinguisher details }
+        '404': { description: Not found }
+    put:
+      tags: [Extinguishers]
+      summary: Update extinguisher
+      description: "Roles: ADMIN, INSPECTOR"
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtinguisherUpdateRequest'
+      responses:
+        '200': { description: Updated }
+        '404': { description: Not found }
+        '403': { description: Insufficient permissions }
+    delete:
+      tags: [Extinguishers]
+      summary: Delete extinguisher
+      description: "Roles: ADMIN"
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      responses:
+        '200': { description: Deleted }
+        '404': { description: Not found }
+        '403': { description: Insufficient permissions }
+  /extinguishers/{id}/maintenance:
+    get:
+      tags: [Maintenance]
+      summary: Maintenance history for extinguisher
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      responses:
+        '200': { description: Maintenance logs for the extinguisher }
+  /inspections:
+    get:
+      tags: [Inspections]
+      summary: List inspections (filtered by role)
+      description: ADMIN sees all; INSPECTOR sees assigned; USER sees own created.
+      responses:
+        '200': { description: Inspection list }
+    post:
+      tags: [Inspections]
+      summary: Schedule inspection
+      description: "Roles: ADMIN, INSPECTOR, USER. Sends email to assigned inspector."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InspectionScheduleRequest'
+      responses:
+        '201': { description: Scheduled with email notification }
+  /inspections/{id}:
+    get:
+      tags: [Inspections]
+      summary: Get inspection by ID
+      description: Role-scoped access. USER own created; INSPECTOR assigned; ADMIN all.
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      responses:
+        '200': { description: Inspection details }
+        '403': { description: Insufficient permissions }
+        '404': { description: Not found }
+  /inspections/{id}/complete:
+    patch:
+      tags: [Inspections]
+      summary: Mark inspection complete
+      description: "Roles: ADMIN, INSPECTOR"
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      responses:
+        '200': { description: Completed }
+        '404': { description: Not found }
+        '403': { description: Insufficient permissions }
+  /inspections/{id}/cancel:
+    patch:
+      tags: [Inspections]
+      summary: Cancel inspection
+      description: USER may cancel own; ADMIN/INSPECTOR any.
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      responses:
+        '200': { description: Cancelled }
+        '403': { description: Insufficient permissions }
+  /maintenance:
+    get:
+      tags: [Maintenance]
+      summary: List maintenance logs
+      responses:
+        '200': { description: Maintenance history }
+    post:
+      tags: [Maintenance]
+      summary: Log maintenance activity
+      description: "Roles: ADMIN, INSPECTOR"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceLogRequest'
+      responses:
+        '201': { description: Logged }
+        '403': { description: Insufficient permissions }
+  /maintenance/{id}:
+    get:
+      tags: [Maintenance]
+      summary: Get maintenance log by ID
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      responses:
+        '200': { description: Maintenance log details }
+        '404': { description: Not found }
+  /reports/inventory/summary:
+    get:
+      tags: [Reports]
+      summary: Inventory summary report
+      description: "Roles: ADMIN, INSPECTOR"
+      parameters:
+        - $ref: '#/components/parameters/FormatQuery'
+      responses:
+        '200': { description: Report data (JSON, CSV, or PDF based on format) }
+        '403': { description: USER role denied }
+  /reports/inspections/pending:
+    get:
+      tags: [Reports]
+      summary: Pending inspections report
+      parameters:
+        - $ref: '#/components/parameters/FormatQuery'
+      responses:
+        '200': { description: Report data }
+  /reports/inspections/completed:
+    get:
+      tags: [Reports]
+      summary: Completed inspections report
+      parameters:
+        - $ref: '#/components/parameters/FormatQuery'
+      responses:
+        '200': { description: Report data }
+  /reports/inspections/overdue:
+    get:
+      tags: [Reports]
+      summary: Overdue inspections report
+      parameters:
+        - $ref: '#/components/parameters/FormatQuery'
+      responses:
+        '200': { description: Report data }
+  /reports/compliance/expired:
+    get:
+      tags: [Reports]
+      summary: Expired extinguishers report
+      parameters:
+        - $ref: '#/components/parameters/FormatQuery'
+      responses:
+        '200': { description: Report data }
+  /reports/compliance/upcoming:
+    get:
+      tags: [Reports]
+      summary: Upcoming expirations report
+      parameters:
+        - $ref: '#/components/parameters/FormatQuery'
+        - name: days
+          in: query
+          description: Number of days ahead to include
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+      responses:
+        '200': { description: Report data }
+  /reports/compliance/status:
+    get:
+      tags: [Reports]
+      summary: Compliance status summary
+      description: "Roles: ADMIN, INSPECTOR"
+      parameters:
+        - $ref: '#/components/parameters/FormatQuery'
+      responses:
+        '200': { description: Report data }
+        '403': { description: USER role denied }
+  /reports/maintenance/history:
+    get:
+      tags: [Reports]
+      summary: Maintenance history report
+      parameters:
+        - $ref: '#/components/parameters/FormatQuery'
+      responses:
+        '200': { description: Report data }
+  /reports/maintenance/frequency:
+    get:
+      tags: [Reports]
+      summary: Maintenance frequency report
+      description: "Roles: ADMIN, INSPECTOR"
+      parameters:
+        - $ref: '#/components/parameters/FormatQuery'
+      responses:
+        '200': { description: Report data }
+        '403': { description: USER role denied }
+  /reports/maintenance/recent:
+    get:
+      tags: [Reports]
+      summary: Recent maintenance activities
+      parameters:
+        - $ref: '#/components/parameters/FormatQuery'
+        - name: limit
+          in: query
+          description: Maximum number of records to return
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+      responses:
+        '200': { description: Report data }
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Notification audit log
+      description: "Roles: ADMIN"
+      responses:
+        '200': { description: Notification list }
+        '403': { description: Insufficient permissions }
+  /notifications/{id}:
+    get:
+      tags: [Notifications]
+      summary: Get notification by ID
+      description: "Roles: ADMIN"
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      responses:
+        '200': { description: Notification details }
+        '404': { description: Not found }
+        '403': { description: Insufficient permissions }
+  /notifications/send:
+    post:
+      tags: [Notifications]
+      summary: Send email notification (internal)
+      description: Service-to-service endpoint. Requires x-service-key header, not JWT.
+      security:
+        - serviceKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationSendRequest'
+      responses:
+        '200': { description: Email sent and logged }
+        '401': { description: Invalid service key }

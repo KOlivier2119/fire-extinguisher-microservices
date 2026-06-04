@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum NotificationType {
+  INSPECTION_SCHEDULED
+  PASSWORD_RESET
+  INSPECTION_OVERDUE
+  PASSWORD_CHANGED
+  PASSWORD_RESET_SUCCESS
+  EMAIL_CHANGED
+  WELCOME
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model Notification {
+  id             String             @id @default(uuid())
+  recipientEmail String
+  subject        String
+  body           String
+  type           NotificationType
+  status         NotificationStatus @default(PENDING)
+  sentAt         DateTime?
+  errorMessage   String?
+  createdAt      DateTime           @default(now())
+
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}

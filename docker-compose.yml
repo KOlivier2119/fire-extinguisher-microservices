@@ -1,0 +1,113 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fems
+      POSTGRES_PASSWORD: fems_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fems"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    build: ./auth-service
+    environment:
+      DATABASE_URL: postgresql://fems:fems_password@postgres:5432/auth_db
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      JWT_ACCESS_EXPIRES: 15m
+      JWT_REFRESH_EXPIRES: 7d
+      PORT: 3001
+      NOTIFICATION_SERVICE_URL: http://notification-service:3004
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key}
+      FRONTEND_URL: http://localhost:3100
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      notification-service:
+        condition: service_started
+
+  notification-service:
+    build: ./notification-service
+    environment:
+      DATABASE_URL: postgresql://fems:fems_password@postgres:5432/notification_db
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      PORT: 3004
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key}
+      SMTP_HOST: ${SMTP_HOST:-smtp.ethereal.email}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-TZW LTD FEMS <noreply@tzw-ltd.com>}
+    ports:
+      - "3004:3004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  extinguisher-service:
+    build: ./extinguisher-service
+    environment:
+      DATABASE_URL: postgresql://fems:fems_password@postgres:5432/extinguisher_db
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      PORT: 3002
+      NOTIFICATION_SERVICE_URL: http://notification-service:3004
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key}
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      notification-service:
+        condition: service_started
+
+  reporting-service:
+    build: ./reporting-service
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      PORT: 3003
+      EXTINGUISHER_SERVICE_URL: http://extinguisher-service:3002
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key}
+    ports:
+      - "3003:3003"
+    depends_on:
+      - extinguisher-service
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    environment:
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      FRONTEND_URL: http://localhost:3100
+      AUTH_SERVICE_URL: http://auth-service:3001
+      EXTINGUISHER_SERVICE_URL: http://extinguisher-service:3002
+      REPORTING_SERVICE_URL: http://reporting-service:3003
+      NOTIFICATION_SERVICE_URL: http://notification-service:3004
+    ports:
+      - "3000:3000"
+    depends_on:
+      - auth-service
+      - extinguisher-service
+      - reporting-service
+      - notification-service
+
+  frontend:
+    build: ./frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api
+    ports:
+      - "3100:3100"
+    depends_on:
+      - api-gateway
+
+volumes:
+  postgres_data:
